@@ -1,5 +1,9 @@
 # edcctl
 
+[![CI](https://github.com/jwmoss/edcctl/actions/workflows/ci.yml/badge.svg)](https://github.com/jwmoss/edcctl/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/jwmoss/edcctl)](https://github.com/jwmoss/edcctl/releases/latest)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 Query Evolution Dance Complex schedules and mobile-app resources through verified JSON endpoints.
 The CLI uses your existing `EDC_LOGIN` and `EDC_PASSWORD` credentials. No extra app or traffic capture is required.
 
@@ -76,7 +80,28 @@ Output excludes chat tokens, group passwords, member lists, and unknown backend 
 
 ## Install
 
-Requires Go 1.25 or later and access to this private repository.
+### Homebrew
+
+```sh
+brew tap jwmoss/tap
+brew install --cask jwmoss/tap/edcctl
+```
+
+### Release archives
+
+Download the archive for your OS and architecture from [Releases](https://github.com/jwmoss/edcctl/releases/latest).
+Verify its SHA-256 digest against `checksums.txt` before installation.
+Archives cover macOS, Linux, and Windows on AMD64 and ARM64.
+
+### Go
+
+```sh
+go install github.com/jwmoss/edcctl/cmd/edcctl@latest
+```
+
+### Source
+
+Requires Go 1.25 or later.
 
 ```sh
 gh repo clone jwmoss/edcctl
@@ -130,3 +155,24 @@ go test -race ./...
 
 Tests use synthetic data and local HTTP servers, not real credentials.
 See [API discovery](docs/api-discovery.md) for the protocol and [capture findings](docs/json-api-investigation.md) for supporting evidence.
+
+## Release
+
+After the release PR merges, tag the updated `main` commit with the next version:
+
+```sh
+git switch main
+git pull --ff-only origin main
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+The tag workflow runs checks and publishes GoReleaser archives with checksums.
+Use a new version for each release; never move an existing tag.
+
+To update Homebrew automatically, set the repository secret `HOMEBREW_TAP_TOKEN` to a token with write access to `jwmoss/homebrew-tap`.
+Without that secret, releases still publish, but a maintainer must update `Casks/edcctl.rb` in the tap through a PR.
+The cask must use the published archive URLs and SHA-256 digests from that release's `checksums.txt`.
+GitHub cannot copy an existing repository secret from ClassReach; configure the token separately.
+
+The personal EDC agent skill lives in the private `jwmoss/private-skills` repository, separate from these public release assets.
