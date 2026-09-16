@@ -84,8 +84,12 @@ Output excludes chat tokens, group passwords, member lists, and unknown backend 
 
 ```sh
 brew tap jwmoss/tap
-brew install --cask jwmoss/tap/edcctl
+brew install --formula jwmoss/tap/edcctl
 ```
+
+The formula builds the tagged source locally and installs Go as a build dependency if necessary.
+This is the recommended macOS installation: downloaded release binaries are not Apple-notarized and Gatekeeper can block them.
+The separate cask uses those downloaded binaries. It does not disable Gatekeeper or remove quarantine.
 
 ### Release archives
 
@@ -170,9 +174,14 @@ git push origin v0.1.0
 The tag workflow runs checks and publishes GoReleaser archives with checksums.
 Use a new version for each release; never move an existing tag.
 
-To update Homebrew automatically, set the repository secret `HOMEBREW_TAP_TOKEN` to a token with write access to `jwmoss/homebrew-tap`.
-Without that secret, releases still publish, but a maintainer must update `Casks/edcctl.rb` in the tap through a PR.
-The cask must use the published archive URLs and SHA-256 digests from that release's `checksums.txt`.
+After each release, update `Formula/edcctl.rb` in `jwmoss/homebrew-tap` through a PR.
+Set its source URL to the new tag and its SHA-256 digest to that source archive's digest.
+Test the source install and version output before merging.
+
+To update the optional binary cask automatically, set the repository secret `HOMEBREW_TAP_TOKEN` to a token with write access to `jwmoss/homebrew-tap`.
+Without that secret, releases still publish, but a maintainer must update `Casks/edcctl.rb` through a PR.
+The cask uses the binary archive digests from the release's `checksums.txt`, not the source archive digest.
+Cask automation does not update the source formula.
 GitHub cannot copy an existing repository secret from ClassReach; configure the token separately.
 
 The personal EDC agent skill lives in the private `jwmoss/private-skills` repository, separate from these public release assets.
