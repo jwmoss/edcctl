@@ -1,5 +1,8 @@
 # edcctl
 
+> **JSON-only replacement pending.** The current implementation parses HTML and does not meet the revised requirement.
+> See the [traffic-capture findings](docs/json-api-investigation.md) for verified endpoints and the remaining evidence needed.
+
 A read-only CLI for the Evolution Dance Complex (EDC) parent portal.
 EDC uses a MobileInventor iOS app with an embedded Studio Pro web portal.
 This CLI uses the same portal without a browser or simulator.
