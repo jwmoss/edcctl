@@ -1,9 +1,5 @@
-// Package api implements a client for the Dance Studio Pro parent
-// portal that powers the Evolution Dance Complex (EDC) mobile app.
-//
-// The portal is a classic PHP web app. Requests carry a CSRF token and
-// a PHP session cookie. Pages return HTML that the client parses, and
-// a few AJAX endpoints return JSON.
+// Package api reads EDC data from Studio Pro JSON endpoints.
+// Only authentication consumes HTML, to establish the session and CSRF token.
 package api
 
 import (
@@ -31,10 +27,10 @@ type Client struct {
 
 type Option func(*Client)
 
-func WithHTTPClient(httpClient *http.Client) Option {
+func WithHTTPClient(client *http.Client) Option {
 	return func(c *Client) {
-		if httpClient != nil {
-			c.httpClient = httpClient
+		if client != nil {
+			c.httpClient = client
 		}
 	}
 }
@@ -56,30 +52,25 @@ func WithUserAgent(userAgent string) Option {
 }
 
 func WithTrace(trace func(method, path string, status int, duration time.Duration)) Option {
-	return func(c *Client) {
-		c.trace = trace
-	}
+	return func(c *Client) { c.trace = trace }
 }
 
 func WithDryRun(dryRun bool) Option {
-	return func(c *Client) {
-		c.dryRun = dryRun
-	}
+	return func(c *Client) { c.dryRun = dryRun }
 }
 
 func New(baseURL, accountID string, opts ...Option) *Client {
-	jar, _ := cookiejar.New(nil)
 	c := &Client{
-		baseURL:   strings.TrimRight(baseURL, "/"),
-		accountID: strings.TrimSpace(accountID),
-		httpClient: &http.Client{
-			Jar:     jar,
-			Timeout: 30 * time.Second,
-		},
-		userAgent: DefaultUserAgent,
+		baseURL:    strings.TrimRight(baseURL, "/"),
+		accountID:  strings.TrimSpace(accountID),
+		httpClient: &http.Client{Timeout: 30 * time.Second},
+		userAgent:  DefaultUserAgent,
 	}
 	for _, opt := range opts {
 		opt(c)
+	}
+	if c.httpClient.Jar == nil {
+		c.httpClient.Jar, _ = cookiejar.New(nil)
 	}
 	c.httpClient.CheckRedirect = func(req *http.Request, via []*http.Request) error {
 		return fmt.Errorf("portal redirect refused; check credentials or portal URL")
@@ -88,84 +79,36 @@ func New(baseURL, accountID string, opts ...Option) *Client {
 }
 
 type APIError struct {
-	Status  int
-	Method  string
-	Path    string
-	Body    []byte
-	Message string
+	Status int
+	Method string
+	Path   string
 }
 
 func (e *APIError) Error() string {
-	if e.Message != "" {
-		return fmt.Sprintf("%s %s: HTTP %d: %s", e.Method, e.Path, e.Status, e.Message)
-	}
-	return fmt.Sprintf("%s %s: HTTP %d", e.Method, e.Path, e.Status)
+	return fmt.Sprintf("%s %s: HTTP %d: portal request failed", e.Method, e.Path, e.Status)
 }
 
-// PortalQuery returns the query parameters that identify the portal
-// account on every page request.
-func (c *Client) PortalQuery() url.Values {
-	return url.Values{
-		"account_id": {c.accountID},
-		"app":        {"1"},
-		"app_mi":     {"1"},
+// do is shared transport for login and the verified JSON data endpoints.
+// It never follows redirects or logs response bodies.
+func (c *Client) do(ctx context.Context, method, requestPath string, form url.Values, accept string) ([]byte, error) {
+	if c.dryRun && method != http.MethodGet {
+		return nil, fmt.Errorf("dry-run: refusing %s %s", method, requestPath)
 	}
-}
-
-// Get fetches a portal page and returns the raw HTML.
-func (c *Client) Get(ctx context.Context, requestPath string, query url.Values) ([]byte, error) {
-	if len(query) == 0 {
-		query = c.PortalQuery()
-	}
-	body, status, err := c.do(ctx, http.MethodGet, requestPath, query, nil)
+	endpoint, err := c.url(requestPath, url.Values{"account_id": {c.accountID}, "app": {"1"}, "app_mi": {"1"}})
 	if err != nil {
 		return nil, err
 	}
-	if err := checkStatus(status, http.MethodGet, requestPath, body); err != nil {
-		return nil, err
-	}
-	if requestPath != "/index.php" && (loginFormPresent(body) || strings.Contains(string(body), `url=/online/index.php`)) {
-		return nil, fmt.Errorf("portal session expired; run the command again")
-	}
-	return body, nil
-}
-
-// Post submits a form-encoded POST request and returns the raw body.
-func (c *Client) Post(ctx context.Context, requestPath string, form url.Values) ([]byte, error) {
-	if c.dryRun {
-		return nil, fmt.Errorf("dry-run: refusing POST %s", requestPath)
-	}
-	if len(form) == 0 {
-		form = url.Values{}
-	}
-	body, status, err := c.do(ctx, http.MethodPost, requestPath, nil, strings.NewReader(form.Encode()))
-	if err != nil {
-		return nil, err
-	}
-	if err := checkStatus(status, http.MethodPost, requestPath, body); err != nil {
-		return nil, err
-	}
-	return body, nil
-}
-
-func (c *Client) do(
-	ctx context.Context,
-	method string,
-	requestPath string,
-	query url.Values,
-	body io.Reader,
-) ([]byte, int, error) {
-	endpoint, err := c.url(requestPath, query)
-	if err != nil {
-		return nil, 0, err
+	var body io.Reader
+	if form != nil {
+		body = strings.NewReader(form.Encode())
 	}
 	req, err := http.NewRequestWithContext(ctx, method, endpoint, body)
 	if err != nil {
-		return nil, 0, fmt.Errorf("create request: %w", err)
+		return nil, fmt.Errorf("create request: %w", err)
 	}
-	req.Header.Set("Accept", "text/html,application/json")
+	req.Header.Set("Accept", accept)
 	req.Header.Set("User-Agent", c.userAgent)
-	if body != nil {
+	if form != nil {
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 		if c.csrfToken != "" {
 			req.Header.Set("X-CSRF-Token", c.csrfToken)
@@ -174,31 +117,27 @@ func (c *Client) do(
 	start := time.Now()
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, 0, fmt.Errorf("request failed: %w", err)
+		return nil, fmt.Errorf("request failed: %w", err)
 	}
 	defer resp.Body.Close()
-	data, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, resp.StatusCode, fmt.Errorf("read response: %w", err)
-	}
 	if c.trace != nil {
 		c.trace(method, req.URL.Path, resp.StatusCode, time.Since(start))
 	}
-	return data, resp.StatusCode, nil
+	if err := checkStatus(resp.StatusCode, method, req.URL.Path); err != nil {
+		return nil, err
+	}
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read response: %w", err)
+	}
+	return data, nil
 }
 
-func checkStatus(status int, method, requestPath string, body []byte) error {
+func checkStatus(status int, method, path string) error {
 	if status >= 200 && status < 300 {
 		return nil
 	}
-	message := "portal request failed"
-	return &APIError{
-		Status:  status,
-		Method:  method,
-		Path:    requestPath,
-		Body:    body,
-		Message: message,
-	}
+	return &APIError{Status: status, Method: method, Path: path}
 }
 
 func (c *Client) url(requestPath string, query url.Values) (string, error) {
@@ -206,37 +145,14 @@ func (c *Client) url(requestPath string, query url.Values) (string, error) {
 	if err != nil || parsed.IsAbs() || parsed.Host != "" || strings.Contains(parsed.Path, "..") || strings.Contains(parsed.Path, `\`) {
 		return "", fmt.Errorf("use a relative portal path without traversal")
 	}
-	if !strings.HasPrefix(requestPath, "/") &&
-		!strings.HasPrefix(requestPath, "http://") &&
-		!strings.HasPrefix(requestPath, "https://") {
-		requestPath = "/" + requestPath
-	}
-	if strings.HasPrefix(requestPath, "http://") || strings.HasPrefix(requestPath, "https://") {
-		u, err := url.Parse(requestPath)
-		if err != nil {
-			return "", fmt.Errorf("parse URL: %w", err)
-		}
-		if len(query) > 0 {
-			u.RawQuery = mergeQuery(u.Query(), query).Encode()
-		}
-		return u.String(), nil
-	}
-	joined := c.baseURL + requestPath
-	u, err := url.Parse(joined)
+	u, err := url.Parse(c.baseURL + "/" + strings.TrimLeft(requestPath, "/"))
 	if err != nil {
 		return "", fmt.Errorf("parse URL: %w", err)
 	}
-	if len(query) > 0 {
-		u.RawQuery = mergeQuery(u.Query(), query).Encode()
+	values := u.Query()
+	for key, items := range query {
+		values[key] = items
 	}
+	u.RawQuery = values.Encode()
 	return u.String(), nil
-}
-
-func mergeQuery(dst, src url.Values) url.Values {
-	for key, values := range src {
-		for _, value := range values {
-			dst.Add(key, value)
-		}
-	}
-	return dst
 }

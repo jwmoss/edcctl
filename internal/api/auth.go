@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"html"
+	"net/http"
 	"net/url"
 	"regexp"
 	"strings"
@@ -26,7 +27,7 @@ func (c *Client) Login(ctx context.Context, email, password string) error {
 		return fmt.Errorf("password is required")
 	}
 
-	page, err := c.Get(ctx, "/index.php", c.PortalQuery())
+	page, err := c.do(ctx, http.MethodGet, "/index.php", nil, "text/html")
 	if err != nil {
 		return fmt.Errorf("load login page: %w", err)
 	}
@@ -45,7 +46,7 @@ func (c *Client) Login(ctx context.Context, email, password string) error {
 		"password":   {password},
 		"btn_login":  {"1"},
 	}
-	response, err := c.Post(ctx, "/index.php?"+c.PortalQuery().Encode(), form)
+	response, err := c.do(ctx, http.MethodPost, "/index.php", form, "text/html")
 	if err != nil {
 		return fmt.Errorf("submit login: %w", err)
 	}
