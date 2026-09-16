@@ -1,6 +1,6 @@
 # edcctl
 
-Query the Evolution Dance Complex schedule through Studio Pro's private JSON endpoint.
+Query Evolution Dance Complex schedules and mobile-app resources through verified JSON endpoints.
 The CLI uses your existing `EDC_LOGIN` and `EDC_PASSWORD` credentials. No extra app or traffic capture is required.
 
 **Data queries use JSON, not HTML scraping.** Login handles the portal's CSRF form and session cookie internally.
@@ -34,7 +34,11 @@ Without `--json`, the CLI prints a table. Use `--plain` for tab-separated rows.
 
 | Command | Purpose |
 | --- | --- |
-| schedule | Query the JSON calendar endpoint |
+| schedule | Query the Studio Pro JSON calendar endpoint |
+| app info | Read app versions, store links, and studio locations |
+| app groups | List visible notification groups and public access status |
+| app notifications --group ID | Read a public group's push notifications |
+| app profile | Read your MobileInventor app profile |
 | login | Validate credentials |
 | doctor | Validate login and a JSON calendar query |
 | config show / init | Inspect or create configuration |
@@ -43,6 +47,32 @@ Without `--json`, the CLI prints a table. Use `--plain` for tab-separated rows.
 
 The HTML-based `students`, `balance`, `history`, `announcements`, `files`, and `account` commands are removed.
 They will return only when verified JSON endpoints support them. There is no HTML fallback.
+
+## Mobile-app resources
+
+```sh
+edcctl --json app info
+edcctl --json app groups
+edcctl --json app notifications --group 8985
+edcctl --json app profile
+```
+
+These commands query MobileInventor, the EDC app provider, after the normal Studio Pro login.
+They support only the EDC app (`2555`) and studio (`30834`).
+The separate app client never receives the Studio Pro password, session cookie, or CSRF token.
+Profile queries use only the authenticated email; there is no arbitrary-email option.
+
+Use an ID with `public: true` from `app groups` to read messages.
+The CLI rejects private, password-protected, invitation-only, login-required, hidden, and unknown groups.
+It does not join groups or change notification settings.
+
+Notifications are app push messages, not Studio Pro bulletin-board messages.
+`sent_at` contains Unix seconds. JSON output includes `detail_html`, decoded from the API's base64 field without HTML parsing.
+Treat that field as untrusted content. The CLI neither renders it nor opens message links.
+Table and plain output show message summaries.
+
+`app profile` is the mobile-app identity, not the Studio Pro contact or billing record.
+Output excludes chat tokens, group passwords, member lists, and unknown backend fields.
 
 ## Install
 

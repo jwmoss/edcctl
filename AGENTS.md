@@ -2,7 +2,7 @@
 
 ## Purpose
 
-`edcctl` reads the EDC schedule from Studio Pro's private JSON endpoint. Keep provider-specific behavior in
+`edcctl` reads EDC schedules and mobile-app resources from verified Studio Pro and MobileInventor JSON endpoints. Keep provider-specific behavior in
 commands and typed API packages; keep generic transport, config, and output
 helpers small and reusable.
 

@@ -1,4 +1,4 @@
-// Package api reads EDC data from Studio Pro JSON endpoints.
+// Package api reads EDC data from Studio Pro and MobileInventor JSON endpoints.
 // Only authentication consumes HTML, to establish the session and CSRF token.
 package api
 
@@ -85,7 +85,7 @@ type APIError struct {
 }
 
 func (e *APIError) Error() string {
-	return fmt.Sprintf("%s %s: HTTP %d: portal request failed", e.Method, e.Path, e.Status)
+	return fmt.Sprintf("%s %s: HTTP %d: request failed", e.Method, e.Path, e.Status)
 }
 
 // do is shared transport for login and the verified JSON data endpoints.
@@ -94,7 +94,11 @@ func (c *Client) do(ctx context.Context, method, requestPath string, form url.Va
 	if c.dryRun && method != http.MethodGet {
 		return nil, fmt.Errorf("dry-run: refusing %s %s", method, requestPath)
 	}
-	endpoint, err := c.url(requestPath, url.Values{"account_id": {c.accountID}, "app": {"1"}, "app_mi": {"1"}})
+	var query url.Values
+	if c.accountID != "" {
+		query = url.Values{"account_id": {c.accountID}, "app": {"1"}, "app_mi": {"1"}}
+	}
+	endpoint, err := c.url(requestPath, query)
 	if err != nil {
 		return nil, err
 	}

@@ -52,6 +52,7 @@ type runtime struct {
 	cfg    *config.Config
 	out    *output.Formatter
 	client *api.Client
+	app    *api.AppClient
 }
 
 func Execute(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
@@ -122,6 +123,7 @@ func newRootCommand(rc *runtime) *cobra.Command {
 	root.AddCommand(newLoginCommand(rc))
 	root.AddCommand(newDoctorCommand(rc))
 	root.AddCommand(newScheduleCommand(rc))
+	root.AddCommand(newAppCommand(rc))
 	root.AddCommand(newCompletionCommand(root))
 
 	return root
@@ -148,6 +150,7 @@ func (rc *runtime) initClient() error {
 		}))
 	}
 	rc.client = api.New(cfg.BaseURL, cfg.AccountID, options...)
+	rc.app = api.NewApp(options...)
 	return rc.client.Login(rc.ctx, cfg.Email, cfg.Password)
 }
 
