@@ -2,13 +2,14 @@
 
 ## Purpose
 
-`edcctl` is a Go CLI wrapper around the
-Studio Pro HTML parent portal. Keep provider-specific behavior in
+`edcctl` reads the EDC schedule from Studio Pro's private JSON endpoint. Keep provider-specific behavior in
 commands and typed API packages; keep generic transport, config, and output
 helpers small and reusable.
 
 ## CLI Rules
 
+- Data queries must use verified JSON endpoints. Reject HTML data responses without a scraping fallback.
+- Keep the CSRF form and HTML login response handling inside authentication; this is not a blocker for JSON data queries.
 - Primary command output goes to stdout.
 - Errors, traces, and diagnostics go to stderr.
 - Keep `--json` stable for scripts.

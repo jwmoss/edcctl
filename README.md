@@ -1,14 +1,48 @@
 # edcctl
 
-> **JSON-only replacement pending.** The current implementation parses HTML and does not meet the revised requirement.
-> See the [traffic-capture findings](docs/json-api-investigation.md) for verified endpoints and the remaining evidence needed.
+Query the Evolution Dance Complex schedule through Studio Pro's private JSON endpoint.
+The CLI uses your existing `EDC_LOGIN` and `EDC_PASSWORD` credentials. No extra app or traffic capture is required.
 
-A read-only CLI for the Evolution Dance Complex (EDC) parent portal.
-EDC uses a MobileInventor iOS app with an embedded Studio Pro web portal.
-This CLI uses the same portal without a browser or simulator.
+**Data queries use JSON, not HTML scraping.** Login handles the portal's CSRF form and session cookie internally.
+The CLI never scrapes the schedule page or falls back to HTML when a data query fails.
 
 Generated from [restctl-template](https://github.com/jwmoss/restctl-template), with the command structure used by [classreach](https://github.com/jwmoss/classreach).
-This is an unofficial client. Portal changes can break its HTML parsers.
+This is an unofficial client for an undocumented endpoint.
+
+## Use
+
+Run from a shell that exports `EDC_LOGIN` and `EDC_PASSWORD`.
+
+```sh
+edcctl --json schedule
+edcctl --json schedule --week 2
+edcctl --json schedule --from 2026-09-28 --to 2026-10-05
+edcctl doctor
+```
+
+The default range is the current Monday-to-Sunday week, based on the machine's local date.
+`--to` is exclusive. Supply either `--week` or `--from` with `--to`.
+The server supplies times in the studio's local time.
+
+The API returns event IDs, student IDs, titles, and start/end times.
+The CLI filters out events beyond the requested range and sorts the result by start time.
+An empty schedule returns `[]` with `--json`.
+
+Without `--json`, the CLI prints a table. Use `--plain` for tab-separated rows.
+
+## Available commands
+
+| Command | Purpose |
+| --- | --- |
+| schedule | Query the JSON calendar endpoint |
+| login | Validate credentials |
+| doctor | Validate login and a JSON calendar query |
+| config show / init | Inspect or create configuration |
+| version | Print build information |
+| completion | Generate shell completions |
+
+The HTML-based `students`, `balance`, `history`, `announcements`, `files`, and `account` commands are removed.
+They will return only when verified JSON endpoints support them. There is no HTML fallback.
 
 ## Install
 
@@ -18,26 +52,20 @@ Requires Go 1.25 or later and access to this private repository.
 gh repo clone jwmoss/edcctl
 cd edcctl
 make build
+mkdir -p ~/.local/bin
 install -m 755 bin/edcctl ~/.local/bin/edcctl
 ```
 
 Add `~/.local/bin` to your PATH if necessary.
 
-## Credentials
+## Configuration
 
-The CLI reads your existing `EDC_LOGIN` and `EDC_PASSWORD` environment variables.
-Run it from a shell that exports these variables.
-It does not read or execute `~/.zshrc` itself.
-
-```sh
-edcctl login
-edcctl doctor
-```
-
-Each command creates a new session. Cookies stay in memory.
+The CLI reads exported environment variables, not `~/.zshrc` directly.
+Each command creates a session whose cookies stay in memory.
 The default studio account ID is `30834`.
 
-Optional configuration:
+`EDCCTL_USERNAME` and `EDCCTL_PASSWORD` override `EDC_LOGIN` and `EDC_PASSWORD`.
+Optional overrides: `EDCCTL_BASE_URL`, `EDCCTL_ACCOUNT_ID`, `--base-url`, and `--account-id`.
 
 ```sh
 edcctl config init
@@ -58,50 +86,17 @@ Keep credentials in environment variables when possible.
 `config init --email EMAIL --password-stdin` can store a password from stdin in a mode-0600 file.
 Never commit this file.
 
-Environment overrides: `EDCCTL_BASE_URL`, `EDCCTL_ACCOUNT_ID`, `EDCCTL_USERNAME`, and `EDCCTL_PASSWORD`.
-`EDCCTL_USERNAME` and `EDCCTL_PASSWORD` take precedence over `EDC_LOGIN` and `EDC_PASSWORD`.
-
-## Commands
-
-```sh
-edcctl students
-edcctl schedule --week 2
-edcctl schedule --from 2026-09-28 --to 2026-10-05
-edcctl balance
-edcctl history
-edcctl history --from 2026-01-01
-edcctl announcements
-edcctl announcements MESSAGE_ID
-edcctl files
-edcctl files --category shared
-edcctl account
-edcctl --json students
-edcctl completion zsh
-```
-
-- `students` lists dancers and enrolled classes, with instructors and rooms.
-- `schedule` defaults to the current Monday-to-Sunday week. `--to` is exclusive. Times use the studio's local time.
-- `balance` and `history` show balances, payments, and charges as portal-formatted strings.
-- `announcements` lists email history and supported message rows. A message ID returns its text.
-- `files` lists shared file and media URLs. It does not download them.
-- `account` shows the primary contact record.
-
-`--json` emits structured data. `--plain` selects tab-separated schedule rows.
-`--trace-http` logs methods, paths, status codes, and durations without request bodies or query values.
-`--timeout` sets the request timeout. `--dry-run` refuses every POST, including login; it does not preview data.
-
+`--trace-http` logs request methods, paths, status codes, and durations, without bodies or query values.
+`--timeout` sets the request timeout.
+`--dry-run` refuses every POST, including login and the read-only calendar query; it does not preview data.
 There are no payment, enrollment, absence-report, account-edit, or arbitrary-request commands.
-Some reads use POST because the portal requires it.
-HTML message formatting and attachments are not reproduced as a full email view.
 
 ## Development
 
 ```sh
 make check
 go test -race ./...
-goreleaser check
-zizmor .github/workflows
 ```
 
 Tests use synthetic data and local HTTP servers, not real credentials.
-See [API discovery](docs/api-discovery.md) for endpoint evidence and limitations.
+See [API discovery](docs/api-discovery.md) for the protocol and [capture findings](docs/json-api-investigation.md) for supporting evidence.

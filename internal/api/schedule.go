@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"net/url"
 	"sort"
 	"strings"
@@ -24,6 +25,9 @@ type CalendarEvent struct {
 // Schedule fetches class and event entries for the range [from, to).
 // Both bounds are dates; to is exclusive.
 func (c *Client) Schedule(ctx context.Context, from, to time.Time) ([]CalendarEvent, error) {
+	if from.IsZero() || to.IsZero() || to.Format("2006-01-02") <= from.Format("2006-01-02") {
+		return nil, fmt.Errorf("schedule end date must be after its start date")
+	}
 	form := url.Values{
 		"action":        {"getclasses"},
 		"season_id":     {""},
@@ -34,22 +38,26 @@ func (c *Client) Schedule(ctx context.Context, from, to time.Time) ([]CalendarEv
 		"end":           {to.Format("2006-01-02")},
 		"selected_view": {"agendaWeek"},
 	}
-	body, err := c.Post(ctx, "/class_calendar-ajax.php?"+c.PortalQuery().Encode(), form)
+	body, err := c.do(ctx, http.MethodPost, "/class_calendar-ajax.php", form, "application/json")
 	if err != nil {
 		return nil, fmt.Errorf("load schedule: %w", err)
 	}
-	events := []CalendarEvent{}
-	if err := json.Unmarshal(body, &events); err != nil {
-		return nil, fmt.Errorf("decode schedule JSON: %w", err)
+	var events []CalendarEvent
+	if err := json.Unmarshal(body, &events); err != nil || events == nil {
+		return nil, fmt.Errorf("schedule endpoint did not return a JSON event array; the session may have expired")
 	}
 
 	// The feed can return recurrences beyond the requested range, so
 	// filter and sort client-side.
 	filtered := make([]CalendarEvent, 0, len(events))
 	for _, event := range events {
-		start, err := time.ParseInLocation("2006-01-02T15:04:05", event.Start, time.Local)
+		start, err := time.ParseInLocation("2006-01-02T15:04:05", event.Start, from.Location())
 		if err != nil {
-			continue
+			// FullCalendar also supports all-day events with a date only.
+			start, err = time.ParseInLocation("2006-01-02", event.Start, from.Location())
+			if err != nil {
+				return nil, fmt.Errorf("schedule JSON contains an invalid event start; refusing an incomplete schedule")
+			}
 		}
 		if start.Before(from) || !start.Before(to) {
 			continue

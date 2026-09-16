@@ -2,11 +2,11 @@
 
 ## Requirement and current status
 
-The required replacement must use JSON endpoints, with no HTML parsing, including authentication.
-The current CLI does not meet that requirement. This investigation does not change its implementation.
+The requirement is JSON **data queries**, with the existing login flow handled internally.
+The earlier interpretation that authentication must also be JSON was incorrect and caused an unnecessary detour.
 
-A full parent-portal JSON API is **not verified**. This is not evidence that no such API exists.
-Do not replace the current client with guessed endpoint names or describe HTML-fragment AJAX as a REST API.
+The CLI now queries the verified JSON calendar endpoint and removes HTML-based resource commands.
+A full parent-portal JSON API is not verified. That does not block the schedule command.
 
 ## Actual EDC traffic capture
 
@@ -44,8 +44,8 @@ Both proxy modes are disabled after the capture.
 - `appdata/js/danceStudioPro.js` on MobileInventor embeds Studio Pro portal pages and passes login data through postMessage.
 - `pageLoader-v2.js` explains that `flutterWrapper.php` belongs to the Jackrabbit-specific `v5/library/jrabbit-new/` tree.
   It is not evidence of a Studio Pro Flutter API.
-- `class_calendar-ajax.php`, with `action=getclasses`, returns JSON in the earlier authenticated tests.
-  Authentication still depends on the HTML login flow, so this alone does not meet the requirement.
+- `class_calendar-ajax.php`, with `action=getclasses`, returns JSON in authenticated tests.
+  Internal CSRF login followed by this JSON query meets the clarified requirement for schedule data.
 - `report_absence-ajax.php`, with `action=list_students`, returns checkbox markup, not student JSON.
 - `bulletin_board-ajax.php`, with `action=show_com_log`, returns HTML message content.
 - An indexed `api_classes.php` URL is not evidence of REST.
@@ -53,23 +53,17 @@ Both proxy modes are disabled after the capture.
   describes this integration as iframe or HTML embedding.
 - Empty responses from `/api/`, `/api/v1/`, or `/apps/api/` do not identify a usable API contract.
 
-## Remaining evidence needed
+## Implementation verification
 
-Studio Pro publishes a separate [Studio Pro Portal app](https://apps.apple.com/us/app/studio-pro-portal/id1618298488).
-Its iOS bundle ID is `com.dancestudio-pro.parents`; its Android package is `com.dancestudiopro.parents`.
-Its transport is not yet inspected. It may use another API, or it may embed the same web portal.
+A live CLI trace on 2026-09-16 confirms this request sequence:
 
-An authorized copy of that app's IPA or APK, or a scoped capture from it, is the next useful artifact.
-The App Store lookup's supported-device list does not by itself determine Apple Silicon Mac availability.
-Do not request or store the user's Apple ID password to obtain the artifact.
+1. GET `/online/index.php` to start login.
+2. POST `/online/index.php` with the configured credentials and CSRF token.
+3. POST `/online/class_calendar-ajax.php` for JSON events.
 
-## Replacement gate
+The CLI does not follow the login redirect to the HTML schedule page.
+The verified date range returns 14 events as JSON.
+Tests enforce this request sequence and reject HTML responses, null arrays, and invalid event dates without a fallback.
 
-Before a JSON-only rewrite, verify:
-
-1. Authentication without parsing HTML.
-2. Account and studio scoping under the existing parent credentials.
-3. Real JSON responses for each promised resource command.
-4. Authentication failure, session expiry, and empty-list behavior.
-
-Remove unsupported commands or document the gap explicitly. Do not retain an HTML fallback.
+A separate Studio Pro Portal app is not required for schedule queries.
+Further research is necessary only to add resource commands whose JSON endpoints remain unverified.

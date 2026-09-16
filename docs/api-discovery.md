@@ -6,47 +6,64 @@ The installed app is `/Applications/EDC.app/Wrapper/Evolution Dance Complex.app`
 Its bundle ID is `com.evolutiondancecomplex.mi`.
 The Cordova `www/index.html` sets `_base` to `https://mobileinventor.com/` and `_appId` to `2555`.
 
-`applib/getVersionInfo.php?app_id=2555&staging=false` lists the server scripts.
 `applib/getAppInfo.php?appid=2555` identifies the backend as `dancestudiopro`, with `cmsID` `30834`.
 `appdata/js/danceStudioPro.js` embeds `https://app.gostudiopro.com/online/` portal pages.
+The portal's `calendar.php` configures FullCalendar to query `class_calendar-ajax.php` for JSON events.
 
 The repository contains neither vendor scripts nor captured portal responses.
 Template source commit: `65972fd9d6845e595a0ef00c174e0dffbc553046`.
 
-## Authentication
+## Authentication is internal
 
 1. GET `index.php?account_id=30834&app=1&app_mi=1`.
 2. Retain the session cookie and CSRF token.
 3. POST the same URL with `email`, `password`, `csrf_token`, and `btn_login=1`.
-4. Check for the login confirmation and schedule redirect marker.
+4. Check for the login confirmation and schedule redirect marker without following that redirect.
 
-The app receives a `dsp-portal` postMessage after login.
-That response can contain a reusable credential value. Never log or commit it.
-This client consumes the response without printing it and retains cookies only in memory.
+Only this login step consumes HTML. It does not fetch the HTML schedule page.
+Login responses can contain a reusable credential value. Never log or commit them.
+The client retains cookies only in memory and sends the CSRF token on subsequent POST requests.
 
-## Read endpoints
+## JSON data endpoint
 
-| Command | Endpoint | Result |
-| --- | --- | --- |
-| students | GET my_students.php | Student cards and class accordions |
-| schedule | POST class_calendar-ajax.php | JSON calendar events |
-| balance | GET my_payments.php | Balance heading and student table |
-| history | GET/POST my_history.php | Ledger rows |
-| announcements | GET bulletin_board.php | Communication IDs, subjects, dates |
-| announcements ID | POST bulletin_board-ajax.php | HTML message body |
-| files | GET files.php | File and media links |
-| account | GET my_account.php | Primary contact form values |
+Both `schedule` and `doctor` use:
 
-Calendar form fields: `action=getclasses`, `start`, `end`, `selected_view=agendaWeek`, and empty season/teacher/location/room filters.
-The server can include events after the requested end date. The client filters and sorts the result.
+```text
+POST https://app.gostudiopro.com/online/class_calendar-ajax.php?account_id=30834&app=1&app_mi=1
+Accept: application/json
+Content-Type: application/x-www-form-urlencoded
+X-CSRF-Token: <session token>
+Cookie: <session cookie>
+```
 
-History search fields: `show_month`, `show_day`, `show_year`, and `btn_search=1`.
-Message detail fields: `action=show_com_log` and `mid`.
-File links wrap their target in `app_display_file.php?url=...`.
+Form fields: `action=getclasses`, `start`, `end`, `selected_view=agendaWeek`, and empty season/teacher/location/room filters.
+Use `YYYY-MM-DD` dates. The CLI treats the end date as exclusive.
 
-## Limits
+Synthetic response:
 
-This is an HTML portal adapter, not a supported public REST API.
-The CLI does not modify payments, registration, waivers, absences, or contact records.
-The MobileInventor app also contains studio content outside the parent portal; this CLI does not reproduce all app screens.
-Tests use synthetic fixtures. Live checks verify only the authorized account.
+```json
+[
+  {
+    "id": "456",
+    "type": "class",
+    "sid": "123",
+    "title": "Ballet",
+    "start": "2026-09-28T16:00:00",
+    "end": "2026-09-28T17:00:00"
+  }
+]
+```
+
+The server can label JSON as `text/html` and include recurrences after the requested end date.
+The client decodes the response body as JSON, filters the range, and sorts events.
+An HTML response, malformed payload, null array, or invalid event start produces an error, not an HTML fallback or partial schedule.
+
+## Unsupported resources
+
+The earlier client parsed HTML for students, financial records, messages, shared files, and contact details.
+Those commands and their HTML parser dependencies are removed.
+Add resource commands only after a JSON endpoint is verified under the authorized parent account.
+The JSON schedule does not require another app, another password, or an entirely JSON login protocol.
+
+This is an undocumented JSON/AJAX endpoint, not a vendor-supported public REST API.
+The CLI has no account-mutation commands.
