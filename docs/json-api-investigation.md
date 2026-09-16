@@ -5,8 +5,9 @@
 The requirement is JSON **data queries**, with the existing login flow handled internally.
 The earlier interpretation that authentication must also be JSON was incorrect and caused an unnecessary detour.
 
-The CLI now queries the verified JSON calendar endpoint and removes HTML-based resource commands.
-A full parent-portal JSON API is not verified. That does not block the schedule command.
+The CLI queries the verified JSON calendar endpoint and four MobileInventor JSON resources.
+See [API discovery](api-discovery.md#mobileinventor-json-resources) for app information, groups, notifications, and profile support.
+HTML-based resource commands remain removed. A full parent-portal JSON API is not verified.
 
 ## Actual EDC traffic capture
 

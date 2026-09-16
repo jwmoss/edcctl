@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Add `app info`, `app groups`, `app notifications --group ID`, and `app profile` through verified JSON endpoints.
+- Keep portal authentication separate from MobileInventor requests.
+- Reject private-group message access until membership can be verified.
+- Filter sensitive and unknown app-response fields from command output.
+
 - Query schedule data only through the verified JSON calendar endpoint.
 - Keep CSRF login and session cookies internal, with the existing EDC credentials.
 - Make `doctor` validate the JSON endpoint instead of an HTML page.
