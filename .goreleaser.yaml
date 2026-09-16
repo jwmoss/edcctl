@@ -1,0 +1,68 @@
+version: 2
+
+project_name: edcctl
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: edcctl
+    main: ./cmd/edcctl
+    binary: edcctl
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    goos:
+      - darwin
+      - linux
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X github.com/jwmoss/edcctl/internal/cli.version={{ .Version }}
+      - -X github.com/jwmoss/edcctl/internal/cli.commit={{ .ShortCommit }}
+      - -X github.com/jwmoss/edcctl/internal/cli.date={{ .Date }}
+
+archives:
+  - id: edcctl
+    ids:
+      - edcctl
+    formats:
+      - tar.gz
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+    files:
+      - LICENSE
+      - README.md
+      - CHANGELOG.md
+
+checksum:
+  name_template: checksums.txt
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+      - "Merge pull request"
+      - "Merge branch"
+
+release:
+  github:
+    owner: jwmoss
+    name: edcctl
+  prerelease: auto
+  name_template: "{{ .ProjectName }} v{{ .Version }}"
+
