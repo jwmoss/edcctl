@@ -97,8 +97,7 @@ func newRootCommand(rc *runtime) *cobra.Command {
 		},
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			if rc.g.showVersion || commandSkipsClient(cmd) {
-				rc.out = output.New(rc.stdout, rc.stderr, rc.g.asJSON, rc.g.plain, rc.g.quiet, rc.g.noColor)
-				return nil
+				return rc.initOutput()
 			}
 			return rc.initClient()
 		},
@@ -129,16 +128,23 @@ func newRootCommand(rc *runtime) *cobra.Command {
 	return root
 }
 
-func (rc *runtime) initClient() error {
+func (rc *runtime) initOutput() error {
 	if rc.g.asJSON && rc.g.plain {
 		return fmt.Errorf("%w: choose only one of --json or --plain", errUsage)
+	}
+	rc.out = output.New(rc.stdout, rc.stderr, rc.g.asJSON, rc.g.plain, rc.g.quiet, rc.g.noColor)
+	return nil
+}
+
+func (rc *runtime) initClient() error {
+	if err := rc.initOutput(); err != nil {
+		return err
 	}
 	cfg, err := rc.loadConfig()
 	if err != nil {
 		return err
 	}
 	rc.cfg = cfg
-	rc.out = output.New(rc.stdout, rc.stderr, rc.g.asJSON, rc.g.plain, rc.g.quiet, rc.g.noColor)
 	options := []api.Option{
 		api.WithTimeout(rc.g.timeout),
 		api.WithDryRun(rc.g.dryRun),
