@@ -56,6 +56,9 @@ func newConfigInitCommand(rc *runtime) *cobra.Command {
 		Use:   "init",
 		Short: "Create a config file",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if rc.g.dryRun {
+				return fmt.Errorf("dry-run: refusing to write config")
+			}
 			path := rc.g.configPath
 			if path == "" {
 				path = config.DefaultPath()

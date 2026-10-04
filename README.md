@@ -155,9 +155,13 @@ There are no payment, enrollment, absence-report, account-edit, or arbitrary-req
 ```sh
 make check
 go test -race ./...
+npm ci --ignore-scripts
+npm run test:e2e
 ```
 
 Tests use synthetic data and local HTTP servers, not real credentials.
+The process tests use [tester-army/e2e](https://github.com/tester-army/e2e).
+See the [flow coverage matrix](tests/e2e/README.md) for requirements and limits.
 See [API discovery](docs/api-discovery.md) for the protocol and [capture findings](docs/json-api-investigation.md) for supporting evidence.
 
 ## Release
