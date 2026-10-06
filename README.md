@@ -144,7 +144,8 @@ password: ""
 ```
 
 Keep credentials in environment variables when possible.
-`config init --email EMAIL --password-stdin` can store a password from stdin in a mode-0600 file.
+`config init --email EMAIL --password-stdin` can store a password from stdin in a private file.
+POSIX uses mode `0600`. Windows inherits permissions from the config directory.
 The command writes a private temporary file before it publishes the config.
 Use `--force` to replace an existing regular file.
 Replacement preserves other hard links to the old file.
