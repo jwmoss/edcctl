@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"io/fs"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -41,17 +42,11 @@ func TestModuleVersionFallback(t *testing.T) {
 		}
 		env = append(env, value)
 	}
-	offlineEnv := append(append([]string{}, env...), "GOPROXY=off", "GOSUMDB=off", "GOWORK=off", "GOTOOLCHAIN=local")
-	// Copy dependency archives from the existing cache. No external network is used.
-	cache, err := command(offlineEnv, "go", "env", "GOMODCACHE").Output()
+	// Reuse only dependency archives already needed by this test run.
+	cache, err := exec.CommandContext(ctx, "go", "env", "GOMODCACHE").Output()
 	if err != nil {
 		t.Fatal(err)
 	}
-	modules, err := command(offlineEnv, "go", "list", "-m", "-json", "all").Output()
-	if err != nil {
-		t.Fatal(err)
-	}
-	decoder := json.NewDecoder(bytes.NewReader(modules))
 	write := func(path string, data []byte) {
 		t.Helper()
 		if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
@@ -59,27 +54,6 @@ func TestModuleVersionFallback(t *testing.T) {
 		}
 		if err := os.WriteFile(path, data, 0600); err != nil {
 			t.Fatal(err)
-		}
-	}
-	for decoder.More() {
-		var dep struct{ Path, Version string }
-		if err := decoder.Decode(&dep); err != nil {
-			t.Fatal(err)
-		}
-		if dep.Version == "" {
-			continue
-		}
-		for _, ext := range []string{".info", ".mod", ".zip"} {
-			rel := filepath.Join(dep.Path, "@v", dep.Version+ext)
-			data, err := os.ReadFile(filepath.Join(strings.TrimSpace(string(cache)), "cache", "download", rel))
-			if os.IsNotExist(err) && ext != ".mod" {
-				// Unused transitive modules need only their module file.
-				continue
-			}
-			if err != nil {
-				t.Fatalf("local dependency archive unavailable: %v", err)
-			}
-			write(filepath.Join(proxy, rel), data)
 		}
 	}
 	var archive bytes.Buffer
@@ -127,7 +101,15 @@ func TestModuleVersionFallback(t *testing.T) {
 	write(base+".info", []byte(`{"Version":"v0.0.0-test","Time":"2026-01-01T00:00:00Z"}`))
 	write(base+".zip", archive.Bytes())
 	write(filepath.Join(proxy, module, "@v", "list"), []byte(moduleVersion+"\n"))
-	env = append(env, "GOPROXY=file://"+filepath.ToSlash(proxy), "GOSUMDB=off", "GOMODCACHE="+filepath.Join(dir, "cache"), "GOBIN="+dir, "GOWORK=off", "GOTOOLCHAIN=local", "GOFLAGS=-modcacherw")
+	fileURL := func(path string) string {
+		path = filepath.ToSlash(path)
+		if !strings.HasPrefix(path, "/") {
+			path = "/" + path
+		}
+		return (&url.URL{Scheme: "file", Path: path}).String()
+	}
+	proxies := fileURL(proxy) + "," + fileURL(filepath.Join(strings.TrimSpace(string(cache)), "cache", "download"))
+	env = append(env, "GOPROXY="+proxies, "GOSUMDB=off", "GOMODCACHE="+filepath.Join(dir, "cache"), "GOBIN="+dir, "GOWORK=off", "GOTOOLCHAIN=local", "GOFLAGS=-modcacherw", "GOPRIVATE=", "GONOPROXY=", "GONOSUMDB=", "GOVCS=*:off")
 	binary := filepath.Join(dir, "edcctl")
 	if runtime.GOOS == "windows" {
 		binary += ".exe"

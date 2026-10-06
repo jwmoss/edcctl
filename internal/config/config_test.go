@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -73,7 +74,7 @@ func TestSaveWritesConfig(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := info.Mode().Perm(); got != 0600 {
+	if got := info.Mode().Perm(); runtime.GOOS != "windows" && got != 0600 {
 		t.Fatalf("mode = %v", got)
 	}
 
@@ -109,10 +110,10 @@ func TestSaveWritesConfig(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Equal(oldData, original) || oldInfo.Mode().Perm() != 0644 {
+	if !bytes.Equal(oldData, original) || (runtime.GOOS != "windows" && oldInfo.Mode().Perm() != 0644) {
 		t.Fatal("replacement changed the old linked file")
 	}
-	if newInfo.Mode().Perm() != 0600 || !bytes.Contains(newData, []byte("new-secret")) {
+	if (runtime.GOOS != "windows" && newInfo.Mode().Perm() != 0600) || !bytes.Contains(newData, []byte("new-secret")) {
 		t.Fatal("replacement did not publish a private config")
 	}
 	entries, err := os.ReadDir(filepath.Dir(path))
@@ -146,7 +147,7 @@ func TestSaveRefusesDestinationSymlink(t *testing.T) {
 				}
 			} else {
 				info, statErr := os.Stat(target)
-				if err != nil || statErr != nil || !bytes.Equal(data, original) || info.Mode().Perm() != 0644 {
+				if err != nil || statErr != nil || !bytes.Equal(data, original) || (runtime.GOOS != "windows" && info.Mode().Perm() != 0644) {
 					t.Fatal("save changed the symlink target")
 				}
 			}

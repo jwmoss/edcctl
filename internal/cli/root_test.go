@@ -204,10 +204,16 @@ func TestConfigInitDryRun(t *testing.T) {
 	for _, existing := range []bool{false, true} {
 		path := filepath.Join(t.TempDir(), "config.yaml")
 		original := []byte("email: old@example.test\n")
+		var beforeMode os.FileMode
 		if existing {
 			if err := os.WriteFile(path, original, 0644); err != nil {
 				t.Fatal(err)
 			}
+			info, err := os.Stat(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			beforeMode = info.Mode()
 		}
 		stdin := &createOnRead{path: path}
 		var stdout, stderr bytes.Buffer
@@ -218,7 +224,7 @@ func TestConfigInitDryRun(t *testing.T) {
 		data, err := os.ReadFile(path)
 		if existing {
 			info, statErr := os.Stat(path)
-			if err != nil || statErr != nil || !bytes.Equal(data, original) || info.Mode().Perm() != 0644 {
+			if err != nil || statErr != nil || !bytes.Equal(data, original) || info.Mode() != beforeMode {
 				t.Fatal("dry-run changed the existing config")
 			}
 		} else if !os.IsNotExist(err) {
