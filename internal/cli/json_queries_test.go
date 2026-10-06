@@ -16,7 +16,7 @@ func TestHTMLResourceCommandsAreAbsent(t *testing.T) {
 	root := newRootCommand(&runtime{g: &globals{}})
 	for _, cmd := range root.Commands() {
 		switch cmd.Name() {
-		case "students", "balance", "history", "announcements", "files", "account":
+		case "students", "announcements", "files", "account":
 			t.Errorf("HTML resource command still exposed: %s", cmd.Name())
 		}
 	}

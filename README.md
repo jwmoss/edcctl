@@ -7,8 +7,9 @@
 Query Evolution Dance Complex schedules and mobile-app resources through verified JSON endpoints.
 The CLI uses your existing `EDC_LOGIN` and `EDC_PASSWORD` credentials. No extra app or traffic capture is required.
 
-**Data queries use JSON, not HTML scraping.** Login handles the portal's CSRF form and session cookie internally.
+**Data queries use JSON where an endpoint exists.** Login handles the portal's CSRF form and session cookie internally.
 The CLI never scrapes the schedule page or falls back to HTML when a data query fails.
+Balance and payment history are the only exceptions: no JSON endpoint exists, so the CLI reads those two portal pages strictly.
 
 Generated from [restctl-template](https://github.com/jwmoss/restctl-template), with the command structure used by [classreach](https://github.com/jwmoss/classreach).
 This is an unofficial client for an undocumented endpoint.
@@ -39,6 +40,8 @@ Without `--json`, the CLI prints a table. Use `--plain` for tab-separated rows.
 | Command | Purpose |
 | --- | --- |
 | schedule | Query the Studio Pro JSON calendar endpoint |
+| balance | Read the account balance for each student |
+| history [--from DATE] | Read payments and charges, newest first |
 | app info | Read app versions, store links, and studio locations |
 | app groups | List visible notification groups and public access status |
 | app notifications --group ID | Read a public group's push notifications |
@@ -49,8 +52,34 @@ Without `--json`, the CLI prints a table. Use `--plain` for tab-separated rows.
 | version | Print build information |
 | completion | Generate shell completions |
 
-The HTML-based `students`, `balance`, `history`, `announcements`, `files`, and `account` commands are removed.
+The HTML-based `students`, `announcements`, `files`, and `account` commands are removed.
 They will return only when verified JSON endpoints support them. There is no HTML fallback.
+
+## Balance and payment history
+
+```sh
+edcctl --json balance
+edcctl --json history
+edcctl --json history --from 2026-09-01
+```
+
+Both commands are read-only. `balance` reads `my_payments.php`; `history` reads `my_history.php`.
+The EDC app shows these same pages in a web view, and no JSON endpoint serves this data.
+See [API discovery](docs/api-discovery.md#balance-and-payment-history) for the evidence.
+
+Amounts are integer cents. A positive balance is owed; a negative balance is credit.
+`balance` returns `balance_cents` and each student's `student_id`, `name`, and `balance_cents`.
+`history` returns `from`, `balance_cents`, `opening_balance_cents`, and `entries`, newest first.
+Each entry has `date`, `student`, `description`, `payment_cents`, `charge_cents`, and the running `balance_cents`.
+
+Without `--from`, `history` starts on the portal's default date and uses a GET request.
+`--from` submits the portal's date search, which is a POST. `--dry-run` refuses it, as it refuses login.
+The search does not persist into later sessions.
+
+The parsers accept only the verified page structure and amount formats.
+They check that the running balances reconcile and match the account balance.
+Any other markup produces an error, not partial data.
+Table output shortens long descriptions; JSON and `--plain` output keep the full text.
 
 ## Mobile-app resources
 
@@ -155,7 +184,7 @@ Never commit this file.
 
 `--trace-http` logs request methods, paths, status codes, and durations, without bodies or query values.
 `--timeout` sets the request timeout.
-`--dry-run` refuses every POST, including login and the read-only calendar query; it does not preview data.
+`--dry-run` refuses every POST, including login, the read-only calendar query, and the history date search; it does not preview data.
 It also refuses config writes, even with `--force`.
 There are no payment, enrollment, absence-report, account-edit, or arbitrary-request commands.
 
