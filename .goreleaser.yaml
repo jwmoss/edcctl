@@ -73,7 +73,7 @@ homebrew_casks:
     repository:
       owner: jwmoss
       name: homebrew-tap
-      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+      token: '{{ index .Env "HOMEBREW_TAP_TOKEN" }}'
     directory: Casks
     homepage: "https://github.com/jwmoss/edcctl"
     description: "Read Evolution Dance Complex schedules and app notifications"
@@ -81,5 +81,5 @@ homebrew_casks:
     binaries:
       - edcctl
     # Releases still work without a cross-repository token; publish the cask manually.
-    skip_upload: '{{ if .Env.HOMEBREW_TAP_TOKEN }}false{{ else }}true{{ end }}'
+    skip_upload: '{{ if index .Env "HOMEBREW_TAP_TOKEN" }}false{{ else }}true{{ end }}'
 

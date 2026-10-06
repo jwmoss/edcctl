@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## 0.1.1 (2026-10-06)
+
+- Publish private config files without destination symlink traversal or unintended overwrites.
+- Report selected config paths and emit a JSON config-init receipt.
+- Reject invalid arguments with exit code 2 before login or config access.
+- Resolve installed module versions while preserving explicit build metadata.
+- Use Go 1.27.1 and gate releases on native tests, CLI flows, race checks, and security scans.
+
+## 0.1.0
+
 - Add `app info`, `app groups`, `app notifications --group ID`, and `app profile` through verified JSON endpoints.
 - Keep portal authentication separate from MobileInventor requests.
 - Reject private-group message access until membership can be verified.
