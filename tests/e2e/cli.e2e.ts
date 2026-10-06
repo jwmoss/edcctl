@@ -2,7 +2,7 @@ import { test, beforeAll, afterAll } from 'e2e';
 import assert from 'node:assert/strict';
 import { spawn, execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { mkdtemp, readFile, writeFile, chmod, stat, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, writeFile, chmod, stat, lstat, link, symlink, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import http from 'node:http';
@@ -18,11 +18,16 @@ let suiteDir: string;
 let binary: string;
 let certificate: Buffer;
 let key: Buffer;
+let buildCommit = 'unknown';
+let buildDate = 'unknown';
 
 beforeAll(async () => {
   suiteDir = await mkdtemp(join(tmpdir(), 'edcctl-e2e-'));
   binary = join(suiteDir, 'edcctl');
   await exec('go', ['build', '-trimpath', '-o', binary, './cmd/edcctl'], { timeout: 120_000 });
+  const { stdout: buildInfo } = await exec('go', ['version', '-m', binary]);
+  buildCommit = buildInfo.match(/vcs\.revision=(\S+)/)?.[1] ?? 'unknown';
+  buildDate = buildInfo.match(/vcs\.time=(\S+)/)?.[1] ?? 'unknown';
   await exec('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1',
     '-subj', '/CN=mobileinventor.com', '-addext', 'subjectAltName=DNS:mobileinventor.com',
     '-keyout', join(suiteDir, 'key.pem'), '-out', join(suiteDir, 'cert.pem')]);
@@ -193,7 +198,8 @@ function appResponse(r: Request) {
 
 test('config persists stdin credentials, protects overwrite, redacts output, and honors environment priority', async () => {
   await fixture({}, async ({ run, config, baseURL, requests }) => {
-    ok(await run(['config', 'init', '--email', email, '--password-stdin', '--base-url', baseURL], {}, password + '\n'));
+    const receipt = JSON.parse(ok(await run(['--json', 'config', 'init', '--email', email, '--password-stdin', '--base-url', baseURL], {}, password + '\n')));
+    assert.deepEqual(receipt, { path: config, status: 'written' });
     assert.equal((await stat(config)).mode & 0o777, 0o600);
     const saved = await readFile(config, 'utf8');
     assert.match(saved, /password: fixture-password/);
@@ -202,19 +208,51 @@ test('config persists stdin credentials, protects overwrite, redacts output, and
     const shown = JSON.parse(ok(await run(['--json', 'config', 'show'], { EDCCTL_USERNAME: 'override@example.test', EDC_LOGIN: 'fallback@example.test' })));
     assert.equal(shown.email, 'override@example.test');
     assert.equal(shown.password, 'redacted');
-    ok(await run(['--plain', 'config', 'show']));
+    assert.equal(shown.path, config);
+    assert.ok(ok(await run(['--plain', 'config', 'show'])).includes(config));
+    assert.ok(ok(await run(['config', 'show'])).includes(config));
     assert.equal(requests.length, 0);
     const login = JSON.parse(ok(await run(['--json', 'login'], { EDCCTL_USERNAME: '', EDCCTL_PASSWORD: '' })));
     assert.equal(login.email, email);
   });
 });
 
-test('forced config overwrite secures an existing readable file before storing a password', async () => {
-  await fixture({}, async ({ run, config }) => {
-    await writeFile(config, 'email: old@example.test\n', { mode: 0o644 });
+test('forced config replacement preserves linked files and private permissions', async () => {
+  await fixture({}, async ({ run, config, home }) => {
+    const original = 'email: old@example.test\n';
+    await writeFile(config, original, { mode: 0o644 });
     await chmod(config, 0o644);
+    const oldConfig = join(home, 'old.yaml');
+    await link(config, oldConfig);
     ok(await run(['config', 'init', '--force', '--password-stdin'], {}, password));
     assert.equal((await stat(config)).mode & 0o777, 0o600);
+    assert.match(await readFile(config, 'utf8'), /password: fixture-password/);
+    assert.equal(await readFile(oldConfig, 'utf8'), original);
+    assert.equal((await stat(oldConfig)).mode & 0o777, 0o644);
+  });
+});
+
+test('config init refuses live and dangling destination symlinks', async () => {
+  await fixture({}, async ({ run, config, home, requests }) => {
+    const target = join(home, 'target.yaml');
+    const original = 'email: old@example.test\n';
+    await writeFile(target, original, { mode: 0o644 });
+    await chmod(target, 0o644);
+    await symlink(target, config);
+    for (const dangling of [false, true]) {
+      if (dangling) await rm(target);
+      for (const flags of [[], ['--force']]) {
+        failed(await run(['config', 'init', '--password-stdin', ...flags], {}, password), 1, /already exists|non-regular/);
+        assert.ok((await lstat(config)).isSymbolicLink());
+        if (dangling) {
+          await assert.rejects(stat(target), { code: 'ENOENT' });
+        } else {
+          assert.equal(await readFile(target, 'utf8'), original);
+          assert.equal((await stat(target)).mode & 0o777, 0o644);
+        }
+      }
+    }
+    assert.equal(requests.length, 0);
   });
 });
 
@@ -222,12 +260,18 @@ test('dry-run config init refuses persistent changes', async () => {
   await fixture({}, async ({ run, config }) => {
     failed(await run(['--dry-run', 'config', 'init', '--password-stdin'], {}, password), 1, /dry-run/);
     await assert.rejects(stat(config), { code: 'ENOENT' });
+    const original = 'email: old@example.test\n';
+    await writeFile(config, original, { mode: 0o644 });
+    await chmod(config, 0o644);
+    failed(await run(['--dry-run', 'config', 'init', '--force', '--password-stdin'], {}, password), 1, /dry-run/);
+    assert.equal(await readFile(config, 'utf8'), original);
+    assert.equal((await stat(config)).mode & 0o777, 0o644);
   });
 });
 
 test('format conflicts fail for network and client-free commands', async () => {
   await fixture({}, async ({ run, requests }) => {
-    for (const command of [['version'], ['config', 'show'], ['login'], ['app', 'info']]) {
+    for (const command of [['--version'], ['version'], ['config'], ['config', 'show'], ['config', 'init', '--force'], ['completion', 'bash'], ['login'], ['app'], ['app', 'info']]) {
       failed(await run(['--json', '--plain', ...command]), 2, /choose only one/);
     }
     assert.equal(requests.length, 0);
@@ -432,11 +476,15 @@ test('data HTTP errors emit diagnostics rather than empty success', async () => 
 });
 
 test('version and completion run without credentials, with valid shell scripts and bad shell rejection', async () => {
-  await fixture({}, async ({ run, requests }) => {
+  await fixture({}, async ({ run, requests, config }) => {
     const env = { EDCCTL_USERNAME: '', EDCCTL_PASSWORD: '' };
-    assert.deepEqual(JSON.parse(ok(await run(['--json', 'version'], env))), { version: 'dev', commit: 'unknown', date: 'unknown' });
-    assert.match(ok(await run(['--version'], env)), /edcctl version dev/);
-    assert.equal(ok(await run(['--plain', 'version'], env)), 'dev\n');
+    await writeFile(config, 'base_url: [broken');
+    const info = JSON.parse(ok(await run(['--json', 'version'], env)));
+    assert.equal(typeof info.version, 'string');
+    assert.ok(info.version.length > 0);
+    assert.deepEqual(info, { version: info.version, commit: buildCommit, date: buildDate });
+    assert.equal(ok(await run(['--version'], env)), `edcctl version ${info.version}\ncommit: ${info.commit}\nbuilt:  ${info.date}\n`);
+    assert.equal(ok(await run(['--plain', 'version'], env)), `${info.version}\n`);
     for (const [shell, marker] of [['bash', /complete.*edcctl/], ['zsh', /compdef.*edcctl/],
       ['fish', /complete.*edcctl/], ['powershell', /Register-ArgumentCompleter/]] as const) {
       assert.match(ok(await run(['completion', shell], env)), marker);
@@ -444,8 +492,21 @@ test('version and completion run without credentials, with valid shell scripts a
     failed(await run(['completion', 'unsupported'], env), 2, /unsupported shell/);
     failed(await run(['completion'], env), 2, /invalid usage/);
     for (const removed of ['students', 'balance', 'history', 'announcements', 'files', 'account']) {
-      failed(await run([removed], env), 1, /unknown command/);
+      failed(await run([removed], env), 2, /unknown command/);
     }
+    assert.equal(requests.length, 0);
+  });
+});
+
+test('unknown commands, flags, and extra arguments return usage code before config or login', async () => {
+  await fixture({}, async ({ run, requests, config }) => {
+    await writeFile(config, 'base_url: [broken');
+    for (const args of [
+      ['unknown-command'], ['--unknown'], ['version', '--unknown'], ['version', '--json=bad'],
+      ['version', 'extra'], ['--version', 'extra'], ['config', 'show', 'extra'], ['config', 'init', 'extra'],
+      ['config', 'unknown-command'], ['app', 'unknown-command'], ['login', 'extra'],
+      ['login', '--version'], ['app', 'info', '--version'], ['completion', 'bash', 'extra'],
+    ]) failed(await run(args), 2, /invalid usage/);
     assert.equal(requests.length, 0);
   });
 });

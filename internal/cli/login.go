@@ -8,6 +8,7 @@ func newLoginCommand(rc *runtime) *cobra.Command {
 	return &cobra.Command{
 		Use:   "login",
 		Short: "Validate the configured Studio Pro credentials",
+		Args:  usageArgs(cobra.NoArgs),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			payload := map[string]any{
 				"ok":         true,

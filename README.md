@@ -133,6 +133,8 @@ edcctl config show
 
 The config file uses the OS configuration directory: `~/Library/Application Support/edcctl/config.yaml` on macOS.
 Use `--config PATH` for another location.
+`config show` reports the selected path in text and JSON output.
+`config init --json` returns an object with `path` and `status: "written"` after a successful write.
 
 ```yaml
 base_url: https://app.gostudiopro.com/online
@@ -142,13 +144,27 @@ password: ""
 ```
 
 Keep credentials in environment variables when possible.
-`config init --email EMAIL --password-stdin` can store a password from stdin in a mode-0600 file.
+`config init --email EMAIL --password-stdin` can store a password from stdin in a private file.
+POSIX uses mode `0600`. Windows inherits permissions from the config directory.
+The command writes a private temporary file before it publishes the config.
+Use `--force` to replace an existing regular file.
+Replacement preserves other hard links to the old file.
+The command refuses destination symlinks and other non-regular files.
+Without `--force`, it preserves files that another process creates during initialization.
 Never commit this file.
 
 `--trace-http` logs request methods, paths, status codes, and durations, without bodies or query values.
 `--timeout` sets the request timeout.
 `--dry-run` refuses every POST, including login and the read-only calendar query; it does not preview data.
+It also refuses config writes, even with `--force`.
 There are no payment, enrollment, absence-report, account-edit, or arbitrary-request commands.
+
+`version` and the root `--version` flag work without configuration or credentials.
+Release build values take priority over embedded Go build information.
+Other builds use the embedded module version, revision, and build date when available.
+Unknown commands, unknown flags, invalid flag values, and extra arguments return exit code `2`.
+Other command failures return exit code `1`.
+`--json` and `--plain` cannot appear together, including on local commands.
 
 ## Development
 

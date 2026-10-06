@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"runtime/debug"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -88,6 +89,7 @@ func newRootCommand(rc *runtime) *cobra.Command {
 		Short:         "Command-line client for the Evolution Dance Complex Studio Pro parent portal",
 		SilenceUsage:  true,
 		SilenceErrors: true,
+		Args:          usageArgs(cobra.NoArgs),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if rc.g.showVersion {
 				return rc.writeVersion()
@@ -102,6 +104,10 @@ func newRootCommand(rc *runtime) *cobra.Command {
 			return rc.initClient()
 		},
 	}
+	root.SetFlagErrorFunc(func(cmd *cobra.Command, err error) error {
+		return fmt.Errorf("%w: %v", errUsage, err)
+	})
+	root.Flags().BoolVar(&rc.g.showVersion, "version", false, "print version and exit")
 
 	flags := root.PersistentFlags()
 	flags.StringVar(&rc.g.configPath, "config", "", "config file path")
@@ -111,7 +117,6 @@ func newRootCommand(rc *runtime) *cobra.Command {
 	flags.BoolVar(&rc.g.plain, "plain", false, "emit stable plain text where available")
 	flags.BoolVarP(&rc.g.quiet, "quiet", "q", false, "suppress non-essential output")
 	flags.BoolVar(&rc.g.noColor, "no-color", false, "disable color")
-	flags.BoolVar(&rc.g.showVersion, "version", false, "print version and exit")
 	flags.DurationVar(&rc.g.timeout, "timeout", 30*time.Second, "HTTP timeout")
 	flags.BoolVar(&rc.g.traceHTTP, "trace-http", false, "log HTTP requests to stderr without secrets")
 	flags.BoolVar(&rc.g.dryRun, "dry-run", false, "refuse non-GET HTTP requests")
@@ -145,10 +150,11 @@ func (rc *runtime) initClient() error {
 		return err
 	}
 	rc.cfg = cfg
+	v, _, _ := currentVersion()
 	options := []api.Option{
 		api.WithTimeout(rc.g.timeout),
 		api.WithDryRun(rc.g.dryRun),
-		api.WithUserAgent("edcctl/" + version),
+		api.WithUserAgent("edcctl/" + v),
 	}
 	if rc.g.traceHTTP {
 		options = append(options, api.WithTrace(func(method, path string, status int, duration time.Duration) {
@@ -192,28 +198,52 @@ func newVersionCommand(rc *runtime) *cobra.Command {
 	return &cobra.Command{
 		Use:   "version",
 		Short: "Print version information",
+		Args:  usageArgs(cobra.NoArgs),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return rc.writeVersion()
 		},
 	}
 }
 
+func currentVersion() (string, string, string) {
+	v, c, d := version, commit, date
+	if info, ok := debug.ReadBuildInfo(); ok {
+		if v == "dev" && info.Main.Version != "" && info.Main.Version != "(devel)" {
+			v = info.Main.Version
+		}
+		for _, setting := range info.Settings {
+			switch setting.Key {
+			case "vcs.revision":
+				if c == "unknown" {
+					c = setting.Value
+				}
+			case "vcs.time":
+				if d == "unknown" {
+					d = setting.Value
+				}
+			}
+		}
+	}
+	return v, c, d
+}
+
 func (rc *runtime) writeVersion() error {
+	v, c, d := currentVersion()
 	payload := map[string]string{
-		"version": version,
-		"commit":  commit,
-		"date":    date,
+		"version": v,
+		"commit":  c,
+		"date":    d,
 	}
 	if rc.out.IsJSON() {
 		return rc.out.JSON(payload)
 	}
 	if rc.out.IsPlain() {
-		rc.out.Printf("%s\n", version)
+		rc.out.Printf("%s\n", v)
 		return nil
 	}
-	rc.out.Printf("edcctl version %s\n", version)
-	rc.out.Printf("commit: %s\n", commit)
-	rc.out.Printf("built:  %s\n", date)
+	rc.out.Printf("edcctl version %s\n", v)
+	rc.out.Printf("commit: %s\n", c)
+	rc.out.Printf("built:  %s\n", d)
 	return nil
 }
 

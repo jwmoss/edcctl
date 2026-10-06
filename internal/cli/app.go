@@ -14,7 +14,14 @@ import (
 func newAppCommand(rc *runtime) *cobra.Command {
 	app := &cobra.Command{
 		Use: "app", Short: "Read EDC mobile-app JSON resources",
+		Args: usageArgs(cobra.NoArgs),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return cmd.Help()
+		},
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			if cmd.Name() == "app" {
+				return rc.initOutput()
+			}
 			if err := rc.initClient(); err != nil {
 				return err
 			}
