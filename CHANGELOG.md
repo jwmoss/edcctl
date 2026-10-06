@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.2.0 (2026-10-06)
+
 - Add read-only `balance` and `history [--from DATE]` commands.
 - Parse only the verified `my_payments.php` and `my_history.php` structure, because no JSON endpoint exists.
 - Reconcile ledger running balances and the account balance; fail closed on unexpected markup.
