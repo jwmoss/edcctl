@@ -42,6 +42,8 @@ type Request = { method: string; url: URL; headers: http.IncomingHttpHeaders; fo
 type Options = {
   login?: 'reject' | 'missing-token' | 'wrong-page' | 'redirect' | 'unauthorized' | 'slow';
   schedule?: unknown;
+  payments?: string;
+  history?: string;
   app?: Record<string, unknown>;
   status?: number;
 };
@@ -102,6 +104,23 @@ async function fixture(options: Options, body: (f: {
         // This provider labels JSON as HTML. The content remains the contract.
         res.setHeader('content-type', 'text/html');
         res.end(typeof options.schedule === 'string' ? options.schedule : JSON.stringify(options.schedule === undefined ? [] : options.schedule));
+      } else if (url.pathname === '/online/my_payments.php' && req.method === 'GET') {
+        assert.equal(req.headers.accept, 'text/html');
+        assert.equal(req.headers.cookie, `session=${cookie}`);
+        if (options.status) { res.writeHead(options.status); res.end('fixture error'); return; }
+        res.end(options.payments ?? paymentsPage);
+      } else if (url.pathname === '/online/my_history.php') {
+        assert.equal(req.headers.accept, 'text/html');
+        assert.equal(req.headers.cookie, `session=${cookie}`);
+        let from = ['2025', '12', '01'];
+        if (req.method === 'POST') {
+          assert.equal(req.headers['x-csrf-token'], token);
+          assert.equal(request.form.get('csrf_token'), token);
+          assert.equal(request.form.get('btn_search'), 'Search');
+          from = ['show_year', 'show_month', 'show_day'].map(k => request.form.get(k)!);
+        } else assert.equal(req.method, 'GET');
+        if (options.status) { res.writeHead(options.status); res.end('fixture error'); return; }
+        res.end(options.history ?? historyPage(from));
       } else { throw new Error(`Unexpected request: ${req.method} ${req.url}`); }
     } catch (error) { failures.push(error as Error); res.writeHead(500); res.end('fixture assertion failed'); }
   };
@@ -166,6 +185,19 @@ function failed(result: Result, code: number, message: RegExp) {
   assert.match(result.stderr, message);
   for (const secret of [password, token, cookie]) assert.ok(!result.stderr.includes(secret));
 }
+
+// Synthetic copies of the verified portal markup. There is no JSON endpoint for these pages.
+const paymentsPage = `<h3>You owe $1,234.50</h3><table class="table table-bordered"><tr><th>Name</th><th>Balance</th><th>Statement</th></tr>
+<tr><td>Student One</td><td>Owes $1,250.00</td><td><a href="app_statements.php?sid=101">View</a></td></tr>
+<tr><td>Student Two</td><td>($15.50)</td><td><a href="app_statements.php?sid=102">View</a></td></tr></table>`;
+const longMemo = 'Registration - Tuition Due (Ballet II/III, Jazz/Lyrical/Contemporary Technique II/III, Tap II)';
+const historyPage = ([year, month, day]: string[]) => `<h3>Payment History</h3>Balance: Owe $1,234.50<br>
+<form method="post"><select name="show_month"><option selected value="${month}">M</option></select>
+<select name="show_day"><option selected value="${day}">D</option></select><select name="show_year"><option selected value="${year}">Y</option></select></form>
+<table class="table table-bordered"><tr><th>--</th><th>Pmts</th><th>Chrgs</th><th>Bal</th></tr>
+<tr><td><span id='sp_9'>Registration<a>...</a></span><span id='sp_full_9' style='display:none'>${longMemo}</span><br><p class="text-info"><i>Student One</i></p><p><small>Nov 15,2026</small></p></td><td></td><td>1,250.00</td><td>$1,234.50</td></tr>
+<tr><td>October Tuition -- <br><p class="text-info"><i>Student One</i></p><p><small>Oct 01,2026</small></p></td><td>20.50</td><td></td><td>($15.50)</td></tr>
+<tr><!--<td></td>--><td></td><td></td><td></td><td>$5.00</td></tr></table>`;
 
 const group = (id: number, rules = {}) => ({ id, appID: 2555, name: `Group ${id}`, description: 'studio',
   anyoneCanJoin: 1, invitationOnly: 0, askToJoin: 0, loginRequired: 0, hidden: 0, pwd: '', memberCnt: 3, ...rules });
@@ -340,6 +372,55 @@ for (const boundary of ['untrusted certificate', 'unreachable CONNECT proxy'] as
   });
 }
 
+test('balance reads per-student balances from the portal page in JSON, plain, and table output', async () => {
+  await fixture({}, async ({ run, requests }) => {
+    assert.deepEqual(JSON.parse(ok(await run(['--json', 'balance']))), { balance_cents: 123450, students: [
+      { student_id: '101', name: 'Student One', balance_cents: 125000 },
+      { student_id: '102', name: 'Student Two', balance_cents: -1550 }] });
+    assert.equal(ok(await run(['--plain', 'balance'])),
+      '101\tStudent One\t$1250.00\n102\tStudent Two\t-$15.50\n\tTotal\t$1234.50\n');
+    assert.match(ok(await run(['balance'])), /STUDENT ID\s+NAME\s+BALANCE[\s\S]*Total\s+\$1234\.50/);
+    assert.ok(requests.every(r => r.method === 'GET' || r.url.pathname === '/online/index.php'));
+  });
+});
+
+test('history reads the ledger by default GET or date search POST, with full JSON and plain memos', async () => {
+  await fixture({}, async ({ run, requests }) => {
+    const history = JSON.parse(ok(await run(['--json', 'history'])));
+    assert.deepEqual(history, { from: '2025-12-01', balance_cents: 123450, opening_balance_cents: 500, entries: [
+      { date: '2026-11-15', student: 'Student One', description: longMemo, payment_cents: 0, charge_cents: 125000, balance_cents: 123450 },
+      { date: '2026-10-01', student: 'Student One', description: 'October Tuition', payment_cents: 2050, charge_cents: 0, balance_cents: -1550 }] });
+    assert.equal(requests.at(-1)!.method, 'GET');
+    assert.equal(JSON.parse(ok(await run(['--json', 'history', '--from', '2026-09-01']))).from, '2026-09-01');
+    assert.equal(requests.at(-1)!.method, 'POST');
+    const plain = ok(await run(['--plain', 'history'])).trimEnd().split('\n');
+    assert.deepEqual(plain, [`2026-11-15\tStudent One\t${longMemo}\t\t$1250.00\t$1234.50`,
+      '2026-10-01\tStudent One\tOctober Tuition\t$20.50\t\t-$15.50']);
+    const table = ok(await run(['history']));
+    assert.match(table, /^Since 2025-12-01; balance \$1234\.50; opening balance \$5\.00\n/);
+    assert.match(table, /DATE\s+STUDENT\s+DESCRIPTION\s+PAYMENT\s+CHARGE\s+BALANCE/);
+    assert.ok(table.includes('…') && !table.includes(longMemo), 'table truncates long memos');
+  });
+});
+
+for (const [name, options, args, message] of [
+  ['unreconciled ledger', { history: historyPage(['2025', '12', '01']).replace('<td>20.50</td>', '<td>20.00</td>') }, ['history'], /do not reconcile/],
+  ['changed ledger header', { history: historyPage(['2025', '12', '01']).replace('Pmts', 'Payments') }, ['history'], /unexpected structure/],
+  ['expired session', { history: '<form><input name="email"><input name="password"></form>' }, ['history'], /session may have expired/],
+  ['mismatched balance heading', { payments: paymentsPage.replace('You owe $1,234.50', 'You owe $1.00') }, ['balance'], /does not match/],
+  ['unknown amount format', { payments: paymentsPage.replace('Owes', 'Due') }, ['balance'], /unexpected structure/],
+] as const) {
+  test(`${args[0]} refuses ${name} rather than partial data`, async () => {
+    await fixture(options, async ({ run }) => { failed(await run(['--json', ...args]), 1, message); });
+  });
+}
+
+test('history refuses a page for another start date', async () => {
+  await fixture({ history: historyPage(['2025', '12', '01']) }, async ({ run }) => {
+    failed(await run(['--json', 'history', '--from', '2026-09-01']), 1, /not the requested 2026-09-01/);
+  });
+});
+
 const range = ['--from', '2026-09-28', '--to', '2026-10-05'];
 const event = (id: string, start: string, title = 'Ballet') => ({ id, type: 'class', sid: '7', title, start, end: start });
 test('schedule sorts and filters exclusive range in JSON, plain, and table output', async () => {
@@ -396,6 +477,7 @@ test('usage validation prevents login for invalid schedule and app arguments', a
       ['schedule', '--from', '2026-09-28'], ['schedule', '--to', '2026-10-05'],
       ['schedule', '--from', 'bad', '--to', '2026-10-05'], ['schedule', '--from', '2026-10-05', '--to', '2026-09-28'],
       ['schedule', ...range, '--week', '0'], ['schedule', 'extra'], ['doctor', 'extra'],
+      ['balance', 'extra'], ['history', 'extra'], ['history', '--from', '2026-9-1'],
       ['app', 'info', 'extra'], ['app', 'profile', 'other@example.test'],
       ['app', 'notifications'], ['app', 'notifications', '--group', '-1'],
     ]) failed(await run(args), 2, /invalid usage/);
@@ -469,7 +551,7 @@ test('empty app collections return arrays and non-EDC account cannot query app',
 
 test('data HTTP errors emit diagnostics rather than empty success', async () => {
   await fixture({ status: 503 }, async ({ run }) => {
-    for (const args of [['schedule', ...range], ['doctor'], ['app', 'info']]) {
+    for (const args of [['schedule', ...range], ['doctor'], ['balance'], ['history'], ['app', 'info']]) {
       failed(await run(['--json', ...args]), 1, /HTTP 503/);
     }
   });
@@ -491,7 +573,7 @@ test('version and completion run without credentials, with valid shell scripts a
     }
     failed(await run(['completion', 'unsupported'], env), 2, /unsupported shell/);
     failed(await run(['completion'], env), 2, /invalid usage/);
-    for (const removed of ['students', 'balance', 'history', 'announcements', 'files', 'account']) {
+    for (const removed of ['students', 'announcements', 'files', 'account']) {
       failed(await run([removed], env), 2, /unknown command/);
     }
     assert.equal(requests.length, 0);

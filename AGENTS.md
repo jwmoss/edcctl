@@ -2,13 +2,17 @@
 
 ## Purpose
 
-`edcctl` reads EDC schedules and mobile-app resources from verified Studio Pro and MobileInventor JSON endpoints. Keep provider-specific behavior in
+`edcctl` reads EDC schedules and mobile-app resources from verified Studio Pro and MobileInventor JSON endpoints.
+It also reads balance and payment history from two portal HTML pages, because no JSON endpoint exists for them. Keep provider-specific behavior in
 commands and typed API packages; keep generic transport, config, and output
 helpers small and reusable.
 
 ## CLI Rules
 
 - Data queries must use verified JSON endpoints. Reject HTML data responses without a scraping fallback.
+- The only HTML data exception is `my_payments.php` and `my_history.php` in `internal/api/payments.go`.
+  Those parsers accept only the verified structure, reconcile amounts, and fail closed. Do not add other HTML parsers
+  without a documented proof that no JSON endpoint exists.
 - Keep the CSRF form and HTML login response handling inside authentication; this is not a blocker for JSON data queries.
 - Primary command output goes to stdout.
 - Errors, traces, and diagnostics go to stderr.

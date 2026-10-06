@@ -23,6 +23,8 @@ It checks that portal secrets never reach MobileInventor.
 | `config show` | JSON redaction, selected path in text/JSON, environment priority, plain output | malformed YAML; conflicting formats; no network requests |
 | `login` | saved credentials, legacy env fallback, account flag, JSON/text/quiet, HTTP trace | missing credentials, refused credentials, missing CSRF, wrong HTML page, redirect, 401, timeout, refused connection, dry-run |
 | `schedule` | range sorting, all-day events, exclusive bounds, JSON/plain/table, empty list, week offset | invalid ranges and arguments before login; HTML, malformed JSON, null, object, invalid dates; 503 |
+| `balance` | per-student balances and total, negative credit, JSON/plain/table | balance-heading mismatch, unknown amount format, 503, extra arguments |
+| `history` | default GET start date, `--from` POST with CSRF and date fields, full memos in JSON/plain, table truncation | unreconciled ledger, changed header, expired session, wrong start date, 503, invalid date, extra arguments |
 | `doctor` | JSON/text receipt, current Monday week, seven-day range | extra arguments; schedule transport error |
 | `app info` | JSON/plain/table, app identity, studio location | incomplete response, 503, wrong studio scope |
 | `app groups` | selected public/private metadata, hidden group exclusion, JSON/plain/table, empty list | missing access rules, wrong app identity, null response |

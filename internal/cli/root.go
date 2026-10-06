@@ -127,6 +127,8 @@ func newRootCommand(rc *runtime) *cobra.Command {
 	root.AddCommand(newLoginCommand(rc))
 	root.AddCommand(newDoctorCommand(rc))
 	root.AddCommand(newScheduleCommand(rc))
+	root.AddCommand(newBalanceCommand(rc))
+	root.AddCommand(newHistoryCommand(rc))
 	root.AddCommand(newAppCommand(rc))
 	root.AddCommand(newCompletionCommand(root))
 

@@ -1,5 +1,7 @@
 // Package api reads EDC data from Studio Pro and MobileInventor JSON endpoints.
-// Only authentication consumes HTML, to establish the session and CSRF token.
+// Authentication consumes HTML to establish the session and CSRF token.
+// Balance and payment history have no JSON endpoint; payments.go parses
+// those two portal pages strictly and fails closed.
 package api
 
 import (
@@ -88,7 +90,8 @@ func (e *APIError) Error() string {
 	return fmt.Sprintf("%s %s: HTTP %d: request failed", e.Method, e.Path, e.Status)
 }
 
-// do is shared transport for login and the verified JSON data endpoints.
+// do is shared transport for login, the verified JSON data endpoints, and the
+// two verified payment pages.
 // It never follows redirects or logs response bodies.
 func (c *Client) do(ctx context.Context, method, requestPath string, form url.Values, accept string) ([]byte, error) {
 	if c.dryRun && method != http.MethodGet {
