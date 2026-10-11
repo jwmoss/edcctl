@@ -39,3 +39,12 @@ For release config changes, also run if GoReleaser is installed:
 ```bash
 goreleaser check
 ```
+
+## Test policy
+
+- Keep only live end-to-end tests against the configured service and static checks.
+- Do not add unit tests, mock transports, fake servers, device simulators, or synthetic subprocess fixtures.
+- Run `make check` for formatting, module consistency, vet, script syntax, and builds.
+- Run `make test` with existing credentials for read-only live verification.
+- Report missing credentials or service failures as blocked live checks, never passes.
+- CI runs static checks without credentials. It does not run live service tests.

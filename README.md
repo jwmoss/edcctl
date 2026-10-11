@@ -198,15 +198,15 @@ Other command failures return exit code `1`.
 ## Development
 
 ```sh
-make check
-go test -race ./...
-npm ci --ignore-scripts
-npm run test:e2e
+make check      # static checks and build
+make test       # live authentication and schedule read
 ```
 
-Tests use synthetic data and local HTTP servers, not real credentials.
-The process tests use [tester-army/e2e](https://github.com/tester-army/e2e).
-See the [flow coverage matrix](tests/e2e/README.md) for requirements and limits.
+The live test requires Python 3 and existing EDC credentials.
+It checks the compiled CLI against the real authenticated schedule endpoint.
+It does not change family records. CI runs static checks without credentials.
+Unit tests, synthetic fixtures, and the Node E2E runner are not part of this project.
+HTTP responses are limited to 64 MiB. The CLI rejects nonpositive timeouts.
 See [API discovery](docs/api-discovery.md) for the protocol and [capture findings](docs/json-api-investigation.md) for supporting evidence.
 
 ## Release

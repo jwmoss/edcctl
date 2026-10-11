@@ -136,6 +136,9 @@ func newRootCommand(rc *runtime) *cobra.Command {
 }
 
 func (rc *runtime) initOutput() error {
+	if rc.g.timeout <= 0 {
+		return fmt.Errorf("%w: --timeout must be positive", errUsage)
+	}
 	if rc.g.asJSON && rc.g.plain {
 		return fmt.Errorf("%w: choose only one of --json or --plain", errUsage)
 	}
