@@ -1,6 +1,0 @@
-{
-  "name": "edcctl-e2e",
-  "private": true,
-  "scripts": { "test:e2e": "e2e run" },
-  "devDependencies": { "e2e": "0.17.0" }
-}

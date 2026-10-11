@@ -17,6 +17,8 @@ import (
 
 const DefaultUserAgent = "edcctl/dev"
 
+const maxResponseBytes = 64 << 20
+
 type Client struct {
 	baseURL    string
 	accountID  string
@@ -133,9 +135,12 @@ func (c *Client) do(ctx context.Context, method, requestPath string, form url.Va
 	if err := checkStatus(resp.StatusCode, method, req.URL.Path); err != nil {
 		return nil, err
 	}
-	data, err := io.ReadAll(resp.Body)
+	data, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes+1))
 	if err != nil {
 		return nil, fmt.Errorf("read response: %w", err)
+	}
+	if len(data) > maxResponseBytes {
+		return nil, fmt.Errorf("response exceeds 64 MiB limit")
 	}
 	return data, nil
 }
