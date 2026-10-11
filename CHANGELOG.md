@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## [0.2.1] - 2026-10-10
+
+- Reject nonpositive timeouts and responses above 64 MiB.
+- Replace synthetic suites with real service checks and static CI.
+- Use Go 1.27.2 for security fixes.
+
 ## 0.2.0 (2026-10-06)
 
 - Add read-only `balance` and `history [--from DATE]` commands.
