@@ -199,11 +199,11 @@ Other command failures return exit code `1`.
 
 ```sh
 make check      # static checks and build
-make test       # live authentication and schedule read
+make test       # live schedule, balance, history, and app reads
 ```
 
 The live test requires Python 3 and existing EDC credentials.
-It checks the compiled CLI against the real authenticated schedule endpoint.
+It checks the compiled CLI against the real authenticated schedule, balance, history, and app endpoints.
 It does not change family records. CI runs static checks without credentials.
 Unit tests, synthetic fixtures, and the Node E2E runner are not part of this project.
 HTTP responses are limited to 64 MiB. The CLI rejects nonpositive timeouts.

@@ -34,7 +34,7 @@ func newConfigShowCommand(rc *runtime) *cobra.Command {
 			if path == "" {
 				path = config.DefaultPath()
 			}
-			cfg, err := config.Load(path)
+			cfg, err := rc.loadConfig()
 			if err != nil {
 				return err
 			}

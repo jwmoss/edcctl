@@ -71,7 +71,7 @@ The following endpoints are verified with app ID `2555`. Their base URL is `http
 
 Sources: `pageLoader-v2.js` (`getGroups`) and `common.js` (`GroupNotifications`, `getAcctInfo`).
 Live CLI verification returns one studio location, four visible groups, 44 public-group messages, and the configured user's app profile.
-Counts can change. Captured responses remain outside Git; tests use synthetic data.
+Counts can change. Captured responses remain outside Git; tests use live read-only requests.
 
 The CLI validates the existing Studio Pro login before app queries.
 MobileInventor requests use a separate client and cookie jar, without portal credentials or CSRF headers.
