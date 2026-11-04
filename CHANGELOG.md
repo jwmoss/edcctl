@@ -5,6 +5,7 @@
 ## [0.2.2] - 2026-11-03
 
 - Update the HTML parser dependency to fix GO-2026-6860.
+- Require Go 1.27.3 to fix GO-2026-6809 in release builds.
 - Respect command-line overrides in `config show`.
 - Extend live checks to balances, payment history, and mobile-app resources.
 
