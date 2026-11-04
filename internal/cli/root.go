@@ -154,6 +154,9 @@ func (rc *runtime) initClient() error {
 	if err != nil {
 		return err
 	}
+	if err := cfg.Validate(); err != nil {
+		return err
+	}
 	rc.cfg = cfg
 	v, _, _ := currentVersion()
 	options := []api.Option{
@@ -181,9 +184,6 @@ func (rc *runtime) loadConfig() (*config.Config, error) {
 	}
 	if rc.g.accountID != "" {
 		cfg.AccountID = rc.g.accountID
-	}
-	if err := cfg.Validate(); err != nil {
-		return nil, err
 	}
 	return cfg, nil
 }
