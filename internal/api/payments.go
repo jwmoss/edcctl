@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -109,17 +110,19 @@ func (c *Client) page(ctx context.Context, method, path string, form url.Values)
 }
 
 func parseBalance(doc *html.Node) (*AccountBalance, error) {
-	table, err := findTable(doc, "Name", "Balance", "Statement")
+	table, err := findTable(doc, []string{"Name", "Balance", "Statement"}, []string{"Name", "Due Now", "Future Balance", "Statement"})
 	if err != nil {
 		return nil, err
 	}
+	rows := tableRows(table)
+	columns := len(children(rows[0], atom.Th))
 	result := &AccountBalance{Students: []StudentBalance{}}
-	for _, row := range dataRows(table) {
+	for _, row := range rows[1:] {
 		cells := children(row, atom.Td)
-		if len(cells) != 3 {
-			return nil, fmt.Errorf("balance row has %d cells, not 3", len(cells))
+		if len(cells) != columns {
+			return nil, fmt.Errorf("balance row has %d cells, expected %d", len(cells), columns)
 		}
-		links := findAll(cells[2], func(n *html.Node) bool { return n.DataAtom == atom.A })
+		links := findAll(cells[columns-1], func(n *html.Node) bool { return n.DataAtom == atom.A })
 		if len(links) != 1 {
 			return nil, fmt.Errorf("balance row has no single statement link")
 		}
@@ -128,9 +131,16 @@ func parseBalance(doc *html.Node) (*AccountBalance, error) {
 			return nil, fmt.Errorf("statement link has no student ID")
 		}
 		name := text(cells[0])
-		amount, err := parseMoney(text(cells[1]))
-		if err != nil || name == "" {
-			return nil, fmt.Errorf("balance row has an invalid name or amount")
+		if name == "" {
+			return nil, fmt.Errorf("balance row has an empty name")
+		}
+		var amount int64
+		for _, cell := range cells[1 : columns-1] {
+			value, err := parseMoney(text(cell))
+			if err != nil {
+				return nil, fmt.Errorf("balance row has an invalid amount")
+			}
+			amount += value
 		}
 		result.BalanceCents += amount
 		result.Students = append(result.Students, StudentBalance{StudentID: match[1], Name: name, BalanceCents: amount})
@@ -156,7 +166,7 @@ func parseHistory(doc *html.Node) (*PaymentHistory, error) {
 	if err != nil {
 		return nil, err
 	}
-	table, err := findTable(doc, "--", "Pmts", "Chrgs", "Bal")
+	table, err := findTable(doc, []string{"--", "Pmts", "Chrgs", "Bal"})
 	if err != nil {
 		return nil, err
 	}
@@ -310,8 +320,8 @@ func parseMoney(value string) (int64, error) {
 	return amount, nil
 }
 
-// findTable returns the only table whose first row has exactly these headers.
-func findTable(doc *html.Node, headers ...string) (*html.Node, error) {
+// findTable requires exactly one table that matches one of the given header layouts.
+func findTable(doc *html.Node, layouts ...[]string) (*html.Node, error) {
 	tables := findAll(doc, func(n *html.Node) bool {
 		if n.DataAtom != atom.Table {
 			return false
@@ -321,18 +331,17 @@ func findTable(doc *html.Node, headers ...string) (*html.Node, error) {
 			return false
 		}
 		cells := children(rows[0], atom.Th)
-		if len(cells) != len(headers) || len(children(rows[0], atom.Td)) != 0 {
+		if len(children(rows[0], atom.Td)) != 0 {
 			return false
 		}
+		headers := make([]string, len(cells))
 		for i, cell := range cells {
-			if text(cell) != headers[i] {
-				return false
-			}
+			headers[i] = text(cell)
 		}
-		return true
+		return slices.ContainsFunc(layouts, func(layout []string) bool { return slices.Equal(headers, layout) })
 	})
 	if len(tables) != 1 {
-		return nil, fmt.Errorf("found %d tables with headers %s, not 1", len(tables), strings.Join(headers, ", "))
+		return nil, fmt.Errorf("expected one table matching %v, found %d", layouts, len(tables))
 	}
 	return tables[0], nil
 }

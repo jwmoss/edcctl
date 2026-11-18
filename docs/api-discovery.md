@@ -117,7 +117,12 @@ The CLI therefore parses these two pages with `golang.org/x/net/html`:
 
 The date search does not persist: a new session shows the default start date again.
 
-`balance` requires exactly one table with the headers `Name`, `Balance`, and `Statement`.
+`balance` accepts two verified header layouts. Exactly one table must match.
+
+- `Name`, `Balance`, `Statement`
+- `Name`, `Due Now`, `Future Balance`, `Statement`
+
+On November 17, 2026, the ledger balance matched the sum of due and future amounts across the student rows. The parser adds both amounts in integer cents.
 Each row needs a name, an amount, and one `app_statements.php?sid=N` link.
 When the `You owe $X` heading is present, it must equal the sum of the student balances.
 
