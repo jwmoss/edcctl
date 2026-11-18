@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## [0.2.3] - 2026-11-17
+
+- Read current and future Studio Pro balances while retaining support for the earlier balance table.
+
 ## [0.2.2] - 2026-11-03
 
 - Update the HTML parser dependency to fix GO-2026-6860.
