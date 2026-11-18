@@ -68,6 +68,7 @@ The EDC app shows these same pages in a web view, and no JSON endpoint serves th
 See [API discovery](docs/api-discovery.md#balance-and-payment-history) for the evidence.
 
 Amounts are integer cents. A positive balance is owed; a negative balance is credit.
+On pages that separate due and future charges, the balance includes both amounts.
 `balance` returns `balance_cents` and each student's `student_id`, `name`, and `balance_cents`.
 `history` returns `from`, `balance_cents`, `opening_balance_cents`, and `entries`, newest first.
 Each entry has `date`, `student`, `description`, `payment_cents`, `charge_cents`, and the running `balance_cents`.
